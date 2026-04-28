@@ -1,0 +1,517 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>长征路线时空漫游</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: "微软雅黑", sans-serif;
+        }
+
+        /* 页面布局：左侧侧边栏 + 右侧2D地图 */
+        body {
+            display: flex;
+            height: auto; /* 高度跟随内容（地图图片），而非固定视口 */
+            min-height: 100vh; /* 最小高度保证占满屏幕 */
+            overflow: visible; /* 取消溢出隐藏，让内容自然展示 */
+            position: relative; /* 为侧边栏粘性定位做准备 */
+        }
+
+        /* ====================== 右上角【返回主页面】按钮 ====================== */
+        #backHomeBtn {
+            position: fixed; /* 固定在右上角，滚动不移动 */
+            top: 20px;
+            right: 20px;
+            z-index: 9999; /* 最高层级，不被遮挡 */
+            width: 50px;    /* 窄一点 */
+            height: 50px;    /* 矮一点 */
+            padding: 5px;
+            background: #8B0000;
+            border: none;
+            border-radius: 5px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            align-items: center;
+            justify-content: center; /* 图片居中 */
+        }
+        #backHomeBtn:hover {
+            background: #a50000;
+            transform: scale(1.05);
+        }
+        /* 返回图标样式 */
+        .back-icon {
+            width: 100%;
+            height: 100%;
+            object-fit: contain; /* 保持图片比例，不拉伸 */
+        }
+
+        /* ====================== 左侧可折叠面板 ====================== */
+        #sidebar {
+            width: 300px;
+            height: 100%;
+            background: #8B0000;
+            color: white;
+            padding: 20px;
+            /* 折叠动画 */
+            transition: width 0.3s ease;
+            flex-shrink: 0;
+            overflow-y: auto; /* 核心：开启垂直滚动 */
+            overflow-x: hidden; /* 隐藏水平滚动 */
+            position: sticky; /* 粘性定位，滚动时侧边栏保持在左侧 */
+            top: 0; /* 粘性定位锚定顶部 */
+        }
+
+        /* 折叠状态样式 */
+        #sidebar.collapsed {
+            width: 60px;
+            padding: 20px 5px;
+        }
+
+        /* 折叠后隐藏文字，只留按钮 */
+        #sidebar.collapsed h2,
+        #sidebar.collapsed .btn-group {
+            display: none;
+        }
+
+        /* 折叠按钮 */
+        #toggleBtn {
+            width: 100%;
+            padding: 10px;
+            background: white;
+            color: #8B0000;
+            border: none;
+            border-radius: 5px;
+            font-weight: bold;
+            cursor: pointer;
+            margin-bottom: 20px;
+        }
+
+
+        /* 节点按钮 */
+        .btn-group {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .node-btn {
+            padding: 12px;
+            background: rgba(255,255,255,0.2);
+            border: 1px solid white;
+            color: white;
+            border-radius: 5px;
+            cursor: pointer;
+            text-align: left;
+        }
+
+        .node-btn:hover {
+            background: white;
+            color: #8B0000;
+        }
+
+        /* BGM控制按钮样式 */
+.bgm-control {
+  margin: 20px 0;
+}
+#bgmBtn {
+  width: 100%;
+  background: rgba(255,255,255,0.3);
+  transition: all 0.3s ease;
+}
+#bgmBtn.playing {
+  background: white;
+  color: #8B0000;
+}
+
+        /* ====================== 右侧2D地图 ====================== */
+        #map {
+            flex: 1;
+            /*background-image: url('/assets/map_base.jpg');
+            background-size: cover; /* 保留铺满，超出部分可滚动 */
+            /*background-position: center;*/
+            position: relative;
+            overflow: auto; /* 开启滚动条，查看完整图片 */
+            min-width: 300px; /* 最小宽度，避免小屏挤压 */
+            height: auto; /* 占满视口高度 */
+        }
+
+        .map-wrapper {
+            position: relative; /* 绝对定位的父容器（关键！） */
+            width: 100%;       /* 跟随图片宽度 */
+            height: auto;      /* 跟随图片高度 */
+            margin: 0 auto;    /* 图片居中 */
+        }
+        
+        /* 地图图片样式（关键修复：控制img尺寸，避免重叠） */
+        .map-img {
+            width: 100%; /* 适配容器宽度 */
+            height: auto; /* 保持宽高比 */
+            display: block; /* 消除img默认行内间隙 */
+        }
+
+        /* 地图节点红点样式 */
+        .map-point {
+            width: 20px;
+            height: 20px;
+            background: red;
+            border-radius: 50%;
+            position: absolute;
+            border: 3px solid white;
+            cursor: pointer;
+            transform: translate(-50%, -50%);
+            z-index: 10; /* 保证红点在图片上方 */
+        }
+
+        /* 地图图片样式 */
+
+
+        /* 节点文字 */
+        .point-label {
+            position: absolute;
+            top: -25px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: black;
+            color: white;
+            padding: 2px 5px;
+            font-size: 12px;
+            border-radius: 3px;
+            white-space: nowrap;
+        }
+
+        /* ====================== 弹窗样式 ====================== */
+        #modal {
+            display: none;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 600px;
+            background: white;
+            padding: 30px;
+            border: 4px solid #8B0000;
+            border-radius: 10px;
+            z-index: 999;
+            box-shadow: 0 0 20px rgba(0,0,0,0.3);
+        }
+
+        #modal h2 {
+            color: #8B0000;
+            text-align: center;
+            margin-bottom: 15px;
+        }
+
+        #modal p {
+            line-height: 1.8;
+            font-size: 16px;
+            margin: 10px 0;
+        }
+
+        .close-btn {
+            background: #8B0000;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin-top: 20px;
+            display: block;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        /* 在 index.html 的 <style> 区域新增 */
+        #modal video {
+            width: 100%;
+            height: auto;        /* 自动适配高度，不变形 */
+            margin-top: 15px;
+            border-radius: 5px;
+            outline: none;
+        }
+    </style>
+</head>
+
+<body>
+    <button id="backHomeBtn">
+        <img src="assets/home.png" alt="返回主页面" class="back-icon">
+    </button>
+
+    <!-- 左侧可折叠侧边栏 -->
+    <div id="sidebar">
+        <button id="toggleBtn">折叠面板</button>
+        <h2>长征节点导航</h2>
+        <!-- 背景音频（放在sidebar内，h2下方） -->
+        <audio id="bgm" autoplay loop muted>
+        <source src="assets/bgm.mp3" type="audio/mpeg">
+    </audio>
+<!-- BGM控制按钮 -->
+<div class="bgm-control">
+  <button id="bgmBtn" class="node-btn">开启背景音乐</button>
+</div>
+        <div class="btn-group">
+            <button class="node-btn" onclick="showDetail('ruijin')">瑞金</button>
+            <button class="node-btn" onclick="showDetail('xiangjiang')">湘江战役</button>
+            <button class="node-btn" onclick="showDetail('zunyi')">遵义会议</button>
+            <button class="node-btn" onclick="showDetail('chishui')">四渡赤水</button>
+            <button class="node-btn" onclick="showDetail('jinsha')">巧渡金沙江</button>
+            <button class="node-btn" onclick="showDetail('daduhe')">大渡河</button>
+            <button class="node-btn" onclick="showDetail('luding')">泸定桥</button>
+            <button class="node-btn" onclick="showDetail('xueshan')">翻越夹金山</button>
+            <button class="node-btn" onclick="showDetail('caodi')">松潘草地</button>
+            <button class="node-btn" onclick="showDetail('lazikou')">腊子口</button>
+            <button class="node-btn" onclick="showDetail('wuqi')">吴起镇</button>
+            <button class="node-btn" onclick="showDetail('huining')">会宁会师</button>
+        </div>
+    </div>
+
+    <!-- 右侧2D长征地图 -->
+    <div id="map">
+        <div class="map-wrapper">
+        <!-- 地图图片（实体元素，可滚动） -->
+        <img src="assets/map_base.jpg" class="map-img" alt="长征路线图">
+        <!-- 6个关键节点 -->
+        <div class="map-point" style="top:93.55%; left:72.3%" onclick="showDetail('ruijin')">
+            <div class="point-label">瑞金</div>
+        </div>
+        <div class="map-point" style="top:94.01%; left:54.1%" onclick="showDetail('xiangjiang')">
+            <div class="point-label">湘江战役</div>
+        </div>
+        <div class="map-point" style="top:81.75%; left:34.0%" onclick="showDetail('zunyi')">
+            <div class="point-label">遵义会议</div>
+        </div>
+        <div class="map-point" style="top:78.25%; left:29.10%" onclick="showDetail('chishui')">
+            <div class="point-label">四渡赤水</div>
+        </div>
+        <div class="map-point" style="top:89.05%; left:15.30%" onclick="showDetail('jinsha')">
+            <div class="point-label">巧渡金沙江</div>
+        </div>
+        <div class="map-point" style="top:69.49%; left:15.20%" onclick="showDetail('daduhe')">
+            <div class="point-label">大渡河</div>
+        </div>
+        <div class="map-point" style="top:65.49%; left:15.15%" onclick="showDetail('luding')">
+            <div class="point-label">泸定桥</div>
+        </div>
+        <div class="map-point" style="top:60%; left:15.67%" onclick="showDetail('xueshan')">
+            <div class="point-label">翻越夹金山</div>
+        </div>
+        <div class="map-point" style="top:43%; left:18.67%" onclick="showDetail('caodi')">
+            <div class="point-label">松潘草地</div>
+        </div>
+        <div class="map-point" style="top:37%; left:23%" onclick="showDetail('lazikou')">
+            <div class="point-label">腊子口</div>
+        </div>
+        <div class="map-point" style="top:18.3%; left:40.5%" onclick="showDetail('wuqi')">
+            <div class="point-label">吴起镇</div>
+        </div>
+        <div class="map-point" style="top:26%; left:28%" onclick="showDetail('huining')">
+            <div class="point-label">会宁会师</div>
+        </div>
+        </div>
+    </div>
+
+    <!-- 详情弹窗 -->
+    <div id="modal">
+        <div id="modalContent"></div>
+        <button class="close-btn" onclick="closeModal()">关闭查看</button>
+    </div>
+
+    <!-- 引入折叠功能JS -->
+    <script>
+        // 右上角返回主页面
+        const backHomeBtn = document.getElementById('backHomeBtn');
+        backHomeBtn.addEventListener('click', () => {
+            window.location.href = 'main.html';
+        });
+
+        // 左侧面板折叠功能
+        const toggleBtn = document.getElementById('toggleBtn');
+        const sidebar = document.getElementById('sidebar');
+        toggleBtn.addEventListener('click', () => {
+            // 切换折叠类
+            sidebar.classList.toggle('collapsed');
+            // 切换按钮文字
+            if (sidebar.classList.contains('collapsed')) {
+                toggleBtn.textContent = '展开面板';
+            } else {
+                toggleBtn.textContent = '折叠面板';
+            }
+        });
+
+        // 核心：展示节点详情
+        function showDetail(type) {
+            const modal = document.getElementById('modal');
+            const content = document.getElementById('modalContent');
+            let html = '';
+
+            // 瑞金
+            if(type === 'ruijin'){
+                html = `<h2>瑞金 - 长征出发地</h2>
+                <p>1934年10月，中央红军从江西瑞金出发，开启二万五千里长征。</p>
+                <p>战士故事：瑞金华屋村 17 位华姓儿郎种下 “信念树” 后参加红军，全部壮烈牺牲，无一人返乡。16 岁的欧阳克荣与 6 个哥哥一同踏上长征路，7 兄弟全部为国捐躯。</p>
+                <video controls>
+                    <source src="assets/video/ruijin.mp4" type="video/mp4">
+                <!-- 兼容低版本浏览器 -->
+                    您的浏览器不支持HTML5视频播放，请升级至最新版本浏览器。
+                </video>`;
+            }
+            // 湘江战役
+            if(type === 'xiangjiang'){
+                html = `<h2>湘江战役 - 最惨烈一战</h2>
+                <p>1934年11月，中央红军在湘江流域与国民党重兵展开激战，虽成功突破封锁线，但付出惨重代价，兵力从 8.6 万锐减至 3 万余人，用牺牲换来了继续前进的机会。</p>
+                <p>战士故事：陈树湘断肠明志，壮烈牺牲。</p>
+                <video controls>
+                    <source src="assets/video/xiangjiang.mp4" type="video/mp4">
+                <!-- 兼容低版本浏览器 -->
+                    您的浏览器不支持HTML5视频播放，请升级至最新版本浏览器。
+                </video>`;
+            }
+            // 遵义会议
+            if(type === 'zunyi'){
+                html = `<h2>遵义会议 - 历史转折点</h2>
+                <p>1935年1月，中共中央在贵州遵义召开政治局扩大会议，纠正了 “左” 倾军事错误，确立了毛泽东同志在党中央和红军的领导地位，是中国共产党历史上生死攸关的伟大转折点。</p>
+                <p>战士故事：遵义娄山关战斗中，24 岁的孔宪权率突击队攻打黑神庙敌指挥所时，左腿胯骨中 6 发机枪弹，留下 12 个枪眼，重伤后留在遵义养伤。</p>
+                <video controls>
+                    <source src="assets/video/zunyi.mp4" type="video/mp4">
+                <!-- 兼容低版本浏览器 -->
+                    您的浏览器不支持HTML5视频播放，请升级至最新版本浏览器。
+                </video>`;
+            }
+            // 四渡赤水
+            if(type === 'chishui'){
+                html = `<h2>四渡赤水 - 军事奇迹</h2>
+                <p>1935 年 1 月至 3 月，毛泽东同志指挥中央红军四渡赤水，灵活机动、声东击西，巧妙摆脱了国民党军队的围追堵截，被誉为世界军事史上的经典运动战范例。</p>
+                <p>战士故事：老红军何木林在青杠坡战斗中负伤，为不暴露身份坚持 14 年装哑，直至全国解放才恢复说话。</p>
+                <video controls>
+                    <source src="assets/video/chishui.mp4" type="video/mp4">
+                <!-- 兼容低版本浏览器 -->
+                    您的浏览器不支持HTML5视频播放，请升级至最新版本浏览器。
+                </video>`;
+            }
+            // 金沙江
+            if(type === 'jinsha'){
+                html = `<h2>巧渡金沙江 - 跳出敌人包围圈</h2>
+                <p>1935 年 5 月，中央红军趁国民党军队防守空虚，巧渡金沙江，不费一枪一弹突破天险，成功跳出了国民党军队的重兵包围圈，赢得了战略转移的主动权。</p>
+                <p>战士故事：军委干部团先遣营在船工张朝寿等人帮助下，找到 6 只木船，抢修后连夜渡江奇袭占领皎平渡。</p>
+                <video controls>
+                    <source src="assets/video/jinsha.mp4" type="video/mp4">
+                <!-- 兼容低版本浏览器 -->
+                    您的浏览器不支持HTML5视频播放，请升级至最新版本浏览器。
+                </video>`;
+            }
+            // 大渡河
+            if(type === 'daduhe'){
+                html = `<h2>强渡大渡河 - 突破天险</h2>
+                <p>1935 年 5 月，中央红军在四川安顺场强渡大渡河，红军战士冒着枪林弹雨，奋勇抢占渡口、架设浮桥，成功突破国民党军队的天险封锁，打开了北上的通道。</p>
+                <p>战士故事：勇士们顶着敌人炮火，在激流中奋力划桨，船被打穿多处仍坚持抵达对岸，为后续部队开辟道路。</p>
+                <video controls>
+                    <source src="assets/video/daduhe.mp4" type="video/mp4">
+                <!-- 兼容低版本浏览器 -->
+                    您的浏览器不支持HTML5视频播放，请升级至最新版本浏览器。
+                </video>`;
+            }
+            // 泸定桥
+            if(type === 'luding'){
+                html = `<h2>飞夺泸定桥 - 勇夺铁索天险</h2>
+                <p>1935 年 5 月，红军战士昼夜奔袭 240 里，抵达泸定桥后，冒着敌人的炮火，攀爬光秃秃的铁索，击溃守敌、成功夺桥，成为长征中最具代表性的英雄壮举。</p>
+                <p>战士故事：22 名突击队员在连长廖大珠率领下，攀着 13 根铁索迎着枪林弹雨冲锋，其中魏小山等 4 名战士牺牲。</p>
+                <video controls>
+                    <source src="assets/video/luding.mp4" type="video/mp4">
+                <!-- 兼容低版本浏览器 -->
+                    您的浏览器不支持HTML5视频播放，请升级至最新版本浏览器。
+                </video>`;
+            }
+            // 夹金山
+            if(type === 'xueshan'){
+                html = `<h2>翻越夹金山 - 第一座大雪山</h2>
+                <p>1935 年 6 月，中央红军翻越长征途中的第一座大雪山 —— 夹金山，面对高寒缺氧、风雪交加的极端环境，红军战士凭借顽强意志，成功征服这座 “雪山天险”。</p>
+                <p>战士故事：毛泽东的警卫员吴吉清抢先背起体力不支的战士戴天福，在毛泽东帮扶下艰难走向山顶。</p>
+                <video controls>
+                    <source src="assets/video/xueshan.mp4" type="video/mp4">
+                <!-- 兼容低版本浏览器 -->
+                    您的浏览器不支持HTML5视频播放，请升级至最新版本浏览器。
+                </video>`;
+            }
+            // 过草地
+            if(type === 'caodi'){
+                html = `<h2>松潘草地 - 极限跋涉</h2>
+                <p>1935 年 8 月至 9 月，中央红军穿越松潘草地，这里沼泽遍布、荒无人烟，红军战士缺衣少食、忍饥挨饿，在泥泞与严寒中艰难跋涉，展现了钢铁般的意志。</p>
+                <p>战士故事：通讯班班长张思德用自己的身体为战友试吃野菜，多次冒着中毒危险，为部队划出 “安全线”。</p>
+                <video controls>
+                    <source src="assets/video/caodi.mp4" type="video/mp4">
+                <!-- 兼容低版本浏览器 -->
+                    您的浏览器不支持HTML5视频播放，请升级至最新版本浏览器。
+                </video>`;
+            }
+            // 腊子口
+            if(type === 'lazikou'){
+                html = `<h2>激战腊子口 - 突破天险</h2>
+                <p>1935 年 9 月，中央红军在甘肃腊子口与国民党守军展开激战，凭借灵活的战术和顽强的战斗精神，突破了这座 “一夫当关、万夫莫开” 的天险，打开了进入甘肃的通道。</p>
+                <p>战士故事：苗族小战士云贵川赤着脚，用带铁钩的长竿攀上近乎垂直的崖壁，放下绑腿接成的绳索，带领突击队迂回敌后，为夺取腊子口立下奇功。</p>
+                <video controls>
+                    <source src="assets/video/lazikou.mp4" type="video/mp4">
+                <!-- 兼容低版本浏览器 -->
+                    您的浏览器不支持HTML5视频播放，请升级至最新版本浏览器。
+                </video>`;
+            }
+            // 吴起镇
+            if(type === 'wuqi'){
+                html = `<h2>吴起镇 - 长征胜利</h2>
+                <p>1935年10月，中央红军到达吴起镇，长征胜利结束。</p><
+                p>战士故事：年仅 16 岁的雷梅英和邻家李二婶一天给红军煮了四、五大锅洋芋，还冒险掩护 3 名重伤病员养伤直至归队。</p>
+                <video controls>
+                    <source src="assets/video/wuqi.mp4" type="video/mp4">
+                <!-- 兼容低版本浏览器 -->
+                    您的浏览器不支持HTML5视频播放，请升级至最新版本浏览器。
+                </video>`;
+            }
+            // 会宁
+            if(type === 'huining'){
+                html = `<h2>会宁会师 - 三大主力会师</h2>
+                <p>1936 年 10 月，红一、二、四方面军在甘肃会宁胜利会师，标志着历时两年的中国工农红军长征完全胜利，粉碎了国民党消灭红军的企图，开创了中国革命的新局面。</p>
+                <p>战士故事：红四方面军一位十七八岁的少年战士，为传递会师关键情报，乔装成骑毛驴的老头，骗过敌军哨卡，顺利将信送到红 31 军参谋长李聚奎手中。</p>
+                <video controls>
+                    <source src="assets/video/huining.mp4" type="video/mp4">
+                <!-- 兼容低版本浏览器 -->
+                    您的浏览器不支持HTML5视频播放，请升级至最新版本浏览器。
+                </video>`;
+            }
+
+            content.innerHTML = html;
+            modal.style.display = 'block';
+        }
+
+        // 关闭弹窗
+        function closeModal() {
+            document.getElementById('modal').style.display = 'none';
+        }
+
+        // 新增：BGM控制逻辑
+        const bgm = document.getElementById('bgm');
+        const bgmBtn = document.getElementById('bgmBtn');
+        bgm.volume = 0.3;
+        bgmBtn.addEventListener('click', () => {
+            if (bgm.muted) {
+                bgm.muted = false;
+                bgm.play();
+                bgmBtn.textContent = '暂停背景音乐';
+                bgmBtn.classList.add('playing');
+            } else {
+                bgm.muted = true;
+                bgm.pause();
+                bgmBtn.textContent = '开启背景音乐';
+                bgmBtn.classList.remove('playing');
+            }
+        });
+        // 音频加载失败提示
+        bgm.addEventListener('error', () => {
+            console.error('BGM加载失败，请检查文件路径！');
+            bgmBtn.textContent = '背景音乐加载失败';
+            bgmBtn.disabled = true;
+        });
+    </script>
+</body>
+</html>
